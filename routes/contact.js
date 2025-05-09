@@ -22,6 +22,54 @@ router.get('/contact', async (req, res) => {
 });
 
 // POST endpoint for contact form
+// Create email transporter once
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: true,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 5000,
+  socketTimeout: 10000
+});
+
+// Verify SMTP configuration on startup
+transporter.verify().catch(err => {
+  console.error('SMTP Configuration Error:', err);
+});
+
+// Async function to send email
+async function sendContactEmail(name, email, subject, message) {
+  try {
+    await transporter.sendMail({
+      from: `"${name} via Website Contact Form" <${process.env.SMTP_USER}>`,
+      to: process.env.RECEIVER_EMAIL,
+      subject: `New Contact Inquiry: ${subject}`,
+      html: `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+          <h2 style="color: #2c3e50;">New Contact Form Submission</h2>
+          <p style="margin: 0 0 10px;"><strong>Name:</strong> ${name}</p>
+          <p style="margin: 0 0 10px;"><strong>Email:</strong> <a href="mailto:${email}" style="color: #3498db;">${email}</a></p>
+          <p style="margin: 0 0 10px;"><strong>Subject:</strong> ${subject}</p>
+          <p style="margin: 10px 0 0;"><strong>Message:</strong></p>
+          <div style="white-space: pre-line; background-color: #fff; padding: 15px; border-radius: 6px; border: 1px solid #ddd;">
+            ${message}
+          </div>
+          <hr style="margin: 30px 0;">
+          <footer style="font-size: 12px; color: #777;">
+            This message was sent via the contact form on your website.
+          </footer>
+        </div>
+      `
+    });
+  } catch (err) {
+    console.error('Error sending contact email:', err);
+  }
+}
+
 router.post('/contact', async (req, res) => {
   try {
     const { name, email, subject, message } = req.body;
@@ -52,54 +100,13 @@ router.post('/contact', async (req, res) => {
     const newContact = new Contact({ name, email, subject, message });
     const savedContact = await newContact.save();
 
-    // Add a delay of 1 second before sending email
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Send email asynchronously without waiting
+    sendContactEmail(name, email, subject, message);
 
-    // Set up nodemailer transporter
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT) || 465,
-      secure: true,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      },
-      debug: process.env.NODE_ENV === 'development',
-      logger: process.env.NODE_ENV === 'development',
-      connectionTimeout: 10000, // 10 seconds
-      greetingTimeout: 5000,    // 5 seconds
-      socketTimeout: 10000      // 10 seconds
-    });
-
-    // Verify transporter configuration
-    await transporter.verify();
-
-    // Send email
-    await transporter.sendMail({
-      from: `"${name} via Website Contact Form" <${process.env.SMTP_USER}>`,
-      to: process.env.RECEIVER_EMAIL,
-      subject: ` New Contact Inquiry: ${subject}`,
-      html: `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
-          <h2 style="color: #2c3e50;"> New Contact Form Submission</h2>
-          <p style="margin: 0 0 10px;"><strong>Name:</strong> ${name}</p>
-          <p style="margin: 0 0 10px;"><strong>Email:</strong> <a href="mailto:${email}" style="color: #3498db;">${email}</a></p>
-          <p style="margin: 0 0 10px;"><strong>Subject:</strong> ${subject}</p>
-          <p style="margin: 10px 0 0;"><strong>Message:</strong></p>
-          <div style="white-space: pre-line; background-color: #fff; padding: 15px; border-radius: 6px; border: 1px solid #ddd;">
-            ${message}
-          </div>
-          <hr style="margin: 30px 0;">
-          <footer style="font-size: 12px; color: #777;">
-            This message was sent via the contact form on your website.
-          </footer>
-        </div>
-      `
-    });
-
+    // Send immediate response
     res.status(200).json({ 
       success: true,
-      message: 'Message sent successfully',
+      message: 'Message received successfully',
       data: {
         contactId: savedContact._id
       }
